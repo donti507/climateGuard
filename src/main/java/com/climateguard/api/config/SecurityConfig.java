@@ -2,6 +2,7 @@ package com.climateguard.api.config;
 
 import com.climateguard.api.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -22,7 +23,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -32,6 +35,11 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
+
+    // Comma-separated allow-list, e.g. "https://app.example.com,https://admin.example.com".
+    // Sourced from cors.allowed-origins in application.yml (CORS_ALLOWED_ORIGINS env var).
+    @Value("${cors.allowed-origins}")
+    private String allowedOrigins;
 
     private static final String[] PUBLIC_URLS = {
             "/api/v1/auth/**",
@@ -63,7 +71,17 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+
+        // Explicit origin allow-list. Do NOT switch this back to "*" —
+        // combined with allowCredentials(true) below, a wildcard origin lets
+        // any website make authenticated, cookie/credentialed requests
+        // against this API on behalf of a logged-in user.
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        configuration.setAllowedOrigins(origins);
+
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
