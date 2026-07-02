@@ -1,0 +1,137 @@
+name: Daily Auto Dev
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: daily-auto-dev
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ secrets.GH_PAT }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+jobs:
+  run-daily-batch:
+    runs-on: ubuntu-latest
+    if: contains(github.repository, 'climateGuard')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bail out if killswitch present
+        run: |
+          if [ -f .github/WORKFLOW_KILLSWITCH ]; then
+            echo "Killswitch active — skipping today's run."
+            exit 1
+          fi
+
+      - name: Set up JDK 17 + Maven cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Set up Node (for Gemini CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Gemini CLI
+        run: npm install -g @google/gemini-cli
+
+      - name: Set up git identity for the agent's commits
+        run: |
+          git config --global user.name "climateguard-auto-dev"
+          git config --global user.email "auto-dev@users.noreply.github.com"
+
+      - name: Decode task list to a runner-local temp file (never committed)
+        run: |
+          echo "${{ secrets.TASKLIST_B64 }}" | base64 -d > /tmp/tasklist.txt
+          echo "Decoded $(wc -l < /tmp/tasklist.txt) tasks."
+
+      - name: Read/init progress counter
+        id: progress
+        run: |
+          # A bare integer only — "which day we're on" — committed to the repo.
+          # Reveals nothing about what the tasks are, only that N have been done.
+          if [ -f .github/AUTOMATION_PROGRESS ]; then
+            NEXT=$(cat .github/AUTOMATION_PROGRESS)
+          else
+            NEXT=1
+          fi
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Run a randomized batch of 1-3 tasks today
+        run: |
+          set -euo pipefail
+          TOTAL=$(wc -l < /tmp/tasklist.txt)
+          NEXT=${{ steps.progress.outputs.next }}
+          BATCH_SIZE=$(( (RANDOM % 3) + 1 ))
+          echo "Starting at task $NEXT of $TOTAL, batch size $BATCH_SIZE"
+
+          for i in $(seq 1 "$BATCH_SIZE"); do
+            if [ "$NEXT" -gt "$TOTAL" ]; then
+              echo "All tasks complete — nothing left to do."
+              break
+            fi
+
+            git checkout main
+            git pull origin main
+
+            LINE=$(sed -n "${NEXT}p" /tmp/tasklist.txt)
+            LABEL=$(echo "$LINE" | cut -d'|' -f1 | tr -d ' ')
+            DESC=$(echo "$LINE" | cut -d'|' -f2-)
+            SLUG=$(echo "$LABEL" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+            BRANCH="auto/${SLUG}-$(date +%Y%m%d%H%M%S)"
+
+            echo "=== $LABEL ($NEXT of $TOTAL) ==="
+            git checkout -b "$BRANCH"
+
+            gemini --yolo --model gemini-2.5-flash -p "
+              You are working in the ClimateGuard Spring Boot repo (Java 17, Spring Boot 3.2,
+              PostgreSQL, Flyway, MapStruct, JWT security), already on branch $BRANCH.
+              You have shell access (git, mvn, gh) — use it directly, non-interactively.
+
+              Task: $DESC
+
+              1. Implement it fully and correctly — real code, not a stub. Match the existing
+                 package structure and conventions (Controller -> Service -> Repository).
+              2. Add or update tests covering the new/changed behavior.
+              3. Run mvn -q test and fix failures before proceeding.
+              4. Update README.md's endpoint table if you added or changed an endpoint.
+              5. Commit with a clear conventional-commit message and push:
+                 git push -u origin $BRANCH
+              6. Open a PR against main with gh pr create describing what changed and how
+                 you tested it.
+
+              If the task can't be fully completed, still push your best attempt and open the
+              PR explaining the blocker.
+            "
+
+            sleep 15
+            PR_NUMBER=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' || true)
+            if [ -n "$PR_NUMBER" ]; then
+              gh pr merge "$PR_NUMBER" --squash --auto \
+                || echo "Auto-merge not enabled — PR left open."
+            fi
+
+            NEXT=$((NEXT + 1))
+          done
+
+          git checkout main
+          git pull origin main
+          echo "$NEXT" > .github/AUTOMATION_PROGRESS
+          git add .github/AUTOMATION_PROGRESS
+          git commit -m "chore: advance automation progress to task $NEXT" || echo "No progress change to commit."
+          git push origin main
