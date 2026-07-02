@@ -17,6 +17,7 @@ concurrency:
 env:
   GH_TOKEN: ${{ secrets.GH_PAT }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  GEMINI_CLI_TRUST_WORKSPACE: "true"
 
 jobs:
   run-daily-batch:
