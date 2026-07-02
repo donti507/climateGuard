@@ -99,7 +99,7 @@ jobs:
             echo "=== $LABEL ($NEXT of $TOTAL) ==="
             git checkout -b "$BRANCH"
 
-            gemini --yolo --model gemini-2.5-flash -p "
+            gemini --yolo --model gemini-2.5-flash-lite -p "
               You are working in the ClimateGuard Spring Boot repo (Java 17, Spring Boot 3.2,
               PostgreSQL, Flyway, MapStruct, JWT security), already on branch $BRANCH.
               You have shell access (git, mvn, gh) — use it directly, non-interactively.
