@@ -14,7 +14,7 @@
     <name>ClimateGuard API</name>
 
     <properties>
-        <java.version>11</java.version>
+        <java.version>17</java.version>
         <org.mapstruct.version>1.5.5.Final</org.mapstruct.version>
         <lombok.version>1.18.30</lombok.version>
         <jjwt.version>0.12.5</jjwt.version>
@@ -65,5 +65,7 @@
                 </configuration>
             </plugin>
         </plugins>
+    </build>
+</project>
     </build>
 </project>
