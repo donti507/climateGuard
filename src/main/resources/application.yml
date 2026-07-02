@@ -15,6 +15,13 @@ jwt:
   secret: ${JWT_SECRET:climateguard-super-secret-key-that-is-at-least-256-bits-long-for-hs256-algorithm}
   expiration: 86400000
 
+cors:
+  # Comma-separated list of allowed origins. Never use "*" together with
+  # allowCredentials(true) — that combination allows any site to make
+  # authenticated requests against this API. Override via CORS_ALLOWED_ORIGINS
+  # in each environment (e.g. your real frontend domain in prod).
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
 management:
   endpoints:
     web:
@@ -27,9 +34,9 @@ spring:
     activate:
       on-profile: dev
   datasource:
-    url: jdbc:postgresql://localhost:5432/climateguard
-    username: postgres
-    password: password
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:climateguard}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:password}
   flyway:
     enabled: true
 
