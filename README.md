@@ -38,6 +38,7 @@ Open http://localhost:8080/swagger-ui.html
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | /api/v1/auth/login | Public | Get JWT token |
+| POST | /api/v1/auth/register | Public | Register a new user |
 | GET | /api/v1/regions | USER | List all regions |
 | GET | /api/v1/observations/region/{id}/stats | USER | Climate stats |
 | GET | /api/v1/flood-events/high-risk | USER | High risk events |
