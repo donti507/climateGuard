@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: climateguard-api
+  datasource:
+    url: jdbc:h2:mem:climateguard-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;NON_KEYWORDS=ROLE,USER,VALUE,NAME
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: false
+
+jwt:
+  secret: test-secret-key-that-is-at-least-256-bits-long-for-hs256-algorithm
+  expiration: 86400000
+
+cors:
+  allowed-origins: http://localhost:3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
