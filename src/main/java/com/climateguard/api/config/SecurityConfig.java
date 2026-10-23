@@ -1,11 +1,14 @@
 package com.climateguard.api.config;
 
+import com.climateguard.api.exception.ErrorResponse;
 import com.climateguard.api.security.JwtAuthFilter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -24,6 +27,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -35,6 +39,7 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
+    private final ObjectMapper objectMapper;
 
     // Comma-separated allow-list, e.g. "https://app.example.com,https://admin.example.com".
     // Sourced from cors.allowed-origins in application.yml (CORS_ALLOWED_ORIGINS env var).
@@ -61,6 +66,34 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/v1/**").hasAuthority("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/**").hasAuthority("ADMIN")
                 .anyRequest().authenticated()
+            )
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("UTF-8");
+                    ErrorResponse error = new ErrorResponse(
+                        LocalDateTime.now(),
+                        HttpStatus.UNAUTHORIZED.value(),
+                        "Unauthorized",
+                        "Authentication required",
+                        request.getRequestURI()
+                    );
+                    objectMapper.writeValue(response.getWriter(), error);
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(HttpStatus.FORBIDDEN.value());
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("UTF-8");
+                    ErrorResponse error = new ErrorResponse(
+                        LocalDateTime.now(),
+                        HttpStatus.FORBIDDEN.value(),
+                        "Forbidden",
+                        "Access denied",
+                        request.getRequestURI()
+                    );
+                    objectMapper.writeValue(response.getWriter(), error);
+                })
             )
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authenticationProvider(authenticationProvider())
