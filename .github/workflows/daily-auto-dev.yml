@@ -24,20 +24,55 @@ jobs:
   run-daily-batch:
     runs-on: ubuntu-latest
     if: contains(github.repository, 'climateGuard')
+
+    # Same Postgres as ci.yml, so tests that need a DB don't fail here
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: climateguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Push with the PAT so the CI workflow actually runs on the new branches/PRs
+          # (pushes made with the default GITHUB_TOKEN don't trigger other workflows)
+          token: ${{ secrets.GH_PAT }}
 
-      - name: Bail out if killswitch present
+      - name: Check killswitch
+        id: killswitch
         run: |
           if [ -f .github/WORKFLOW_KILLSWITCH ]; then
             echo "Killswitch active — skipping today's run."
-            exit 1
+            echo "active=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "active=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check required secrets
+        if: steps.killswitch.outputs.active == 'false'
+        env:
+          TASKLIST_B64: ${{ secrets.TASKLIST_B64 }}
+        run: |
+          missing=0
+          for v in GH_TOKEN OPENAI_API_KEY OPENAI_API_BASE TASKLIST_B64; do
+            if [ -z "${!v}" ]; then echo "::error::Secret for $v is empty/missing"; missing=1; fi
+          done
+          exit $missing
+
       - name: Set up JDK 17 + Maven cache
+        if: steps.killswitch.outputs.active == 'false'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -45,39 +80,51 @@ jobs:
           cache: maven
 
       - name: Set up Python (for aider)
+        if: steps.killswitch.outputs.active == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install aider
+        if: steps.killswitch.outputs.active == 'false'
         run: pip install aider-chat
 
-      - name: Set up git identity for the agent's commits
+      - name: Set up git identity
+        if: steps.killswitch.outputs.active == 'false'
         run: |
           git config --global user.name "climateguard-auto-dev"
           git config --global user.email "auto-dev@users.noreply.github.com"
 
-      - name: Decode task list to a runner-local temp file (never committed)
+      - name: Decode task list (runner-local, never committed)
+        if: steps.killswitch.outputs.active == 'false'
+        env:
+          TASKLIST_B64: ${{ secrets.TASKLIST_B64 }}
         run: |
-          echo "${{ secrets.TASKLIST_B64 }}" | base64 -d > /tmp/tasklist.txt
-          echo "Decoded $(wc -l < /tmp/tasklist.txt) tasks."
+          # Drop blank lines so they don't count as tasks
+          echo "$TASKLIST_B64" | base64 -d | sed '/^[[:space:]]*$/d' > /tmp/tasklist.txt
+          echo "Decoded $(grep -c '' /tmp/tasklist.txt) tasks."
 
       - name: Read/init progress counter
+        if: steps.killswitch.outputs.active == 'false'
         id: progress
         run: |
-          # A bare integer only — "which day we're on" — committed to the repo.
-          # Reveals nothing about what the tasks are, only that N have been done.
           if [ -f .github/AUTOMATION_PROGRESS ]; then
-            NEXT=$(cat .github/AUTOMATION_PROGRESS)
-          else
-            NEXT=1
+            NEXT=$(tr -dc '0-9' < .github/AUTOMATION_PROGRESS)
           fi
-          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "next=${NEXT:-1}" >> "$GITHUB_OUTPUT"
 
-      - name: Run a randomized batch of 1-3 tasks today
+      - name: Run a randomized batch of 1-3 tasks
+        if: steps.killswitch.outputs.active == 'false'
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: climateguard
+          DB_USER: postgres
+          DB_PASSWORD: password
         run: |
-          set -euo pipefail
-          TOTAL=$(wc -l < /tmp/tasklist.txt)
+          set -uo pipefail   # no -e: one failed task must not lose the progress counter
+          # grep -c '' also counts a last line with no trailing newline (wc -l doesn't)
+          TOTAL=$(grep -c '' /tmp/tasklist.txt)
           NEXT=${{ steps.progress.outputs.next }}
           BATCH_SIZE=$(( (RANDOM % 3) + 1 ))
           echo "Starting at task $NEXT of $TOTAL, batch size $BATCH_SIZE"
@@ -88,21 +135,25 @@ jobs:
               break
             fi
 
-            git checkout main
-            git pull origin main
+            git checkout main && git pull --rebase origin main
 
             LINE=$(sed -n "${NEXT}p" /tmp/tasklist.txt)
             LABEL=$(echo "$LINE" | cut -d'|' -f1 | tr -d ' ')
-            DESC=$(echo "$LINE" | cut -d'|' -f2-)
-            SLUG=$(echo "$LABEL" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-            BRANCH="auto/${SLUG}-$(date +%Y%m%d%H%M%S)"
+            DESC=$(echo "$LINE" | cut -d'|' -f2- | sed 's/^ *//')
+            SLUG=$(echo "$LABEL" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
+            BRANCH="auto/${SLUG:-task$NEXT}-$(date +%Y%m%d%H%M%S)"
 
             echo "=== $LABEL ($NEXT of $TOTAL) ==="
             git checkout -b "$BRANCH"
 
+            # --no-auto-commits: aider commits on its own by default, which bypassed your commit step
+            # --no-gitignore:    stops aider from editing .gitignore in every PR
             aider \
               --model "$MODEL_NAME" \
               --yes-always \
+              --no-auto-commits \
+              --no-gitignore \
+              --no-show-model-warnings \
               --no-check-update \
               --message "
                 You are working in the ClimateGuard Spring Boot repo (Java 17, Spring Boot 3.2,
@@ -117,40 +168,45 @@ jobs:
 
                 Do not run shell commands yourself; just edit files. I will run tests and commit
                 separately after you finish.
-              "
+              " || echo "::warning::aider exited with an error on $LABEL"
 
-            echo "Running tests..."
-            if mvn -q test; then
-              echo "Tests passed."
-            else
-              echo "Tests failed — committing work-in-progress anyway so it's visible in the PR."
-            fi
+            # Never commit aider's own history/cache files
+            rm -rf .aider.chat.history.md .aider.input.history .aider.tags.cache.v*
+
+            TEST_RESULT="passed"
+            mvn -B -q test || TEST_RESULT="FAILED"
+            echo "Tests $TEST_RESULT"
 
             git add -A
-            git commit -m "feat: $LABEL - $DESC" || echo "No changes to commit."
-            git push -u origin "$BRANCH"
+            if git diff --cached --quiet; then
+              echo "No changes produced for $LABEL — skipping commit/PR."
+              git checkout main
+              git branch -D "$BRANCH"
+            else
+              git commit -m "feat: $LABEL - $DESC"
+              if git push -u origin "$BRANCH"; then
+                gh pr create \
+                  --title "Auto: $LABEL" \
+                  --body "Automated attempt at: $DESC
 
-            gh pr create \
-              --title "Auto: $LABEL" \
-              --body "Automated attempt at: $DESC
+          Model: $MODEL_NAME
+          Branch: $BRANCH
+          Local test run: $TEST_RESULT
 
-Model: $MODEL_NAME
-Branch: $BRANCH
-
-Please review before merging — this PR was generated by the daily-auto-dev workflow
-and has NOT been auto-merged. Check the test results in the CI run on this PR." \
-              --base main --head "$BRANCH" || echo "PR creation failed or already exists."
-
-            # NOTE: auto-merge intentionally removed. PRs from this workflow wait for
-            # human review before landing on main. Re-add a `gh pr merge --auto --squash`
-            # call here only if you deliberately want unattended merges again.
+          Please review before merging — generated by the daily-auto-dev workflow, not auto-merged." \
+                  --base main --head "$BRANCH" || echo "::warning::PR creation failed for $BRANCH"
+              else
+                echo "::warning::Push failed for $BRANCH"
+              fi
+            fi
 
             NEXT=$((NEXT + 1))
           done
 
-          git checkout main
-          git pull origin main
+          git checkout main && git pull --rebase origin main
           echo "$NEXT" > .github/AUTOMATION_PROGRESS
           git add .github/AUTOMATION_PROGRESS
-          git commit -m "chore: advance automation progress to task $NEXT" || echo "No progress change to commit."
-          git push origin main
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: advance automation progress to task $NEXT"
+            git push origin main || { echo "::error::Could not push progress counter to main (branch protection?)"; exit 1; }
+          fi
