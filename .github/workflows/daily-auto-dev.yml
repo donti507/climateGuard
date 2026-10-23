@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           # Push with the PAT so the CI workflow actually runs on the new branches/PRs
@@ -73,7 +73,7 @@ jobs:
 
       - name: Set up JDK 17 + Maven cache
         if: steps.killswitch.outputs.active == 'false'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -81,7 +81,7 @@ jobs:
 
       - name: Set up Python (for aider)
         if: steps.killswitch.outputs.active == 'false'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -108,7 +108,11 @@ jobs:
         if: steps.killswitch.outputs.active == 'false'
         id: progress
         run: |
-          if [ -f .github/AUTOMATION_PROGRESS ]; then
+          # Progress is stored on a separate "automation-state" branch, because
+          # rules on main block direct pushes. Falls back to the old file on main.
+          if git fetch -q origin automation-state 2>/dev/null; then
+            NEXT=$(git show FETCH_HEAD:AUTOMATION_PROGRESS | tr -dc '0-9')
+          elif [ -f .github/AUTOMATION_PROGRESS ]; then
             NEXT=$(tr -dc '0-9' < .github/AUTOMATION_PROGRESS)
           fi
           echo "next=${NEXT:-1}" >> "$GITHUB_OUTPUT"
@@ -203,10 +207,11 @@ jobs:
             NEXT=$((NEXT + 1))
           done
 
-          git checkout main && git pull --rebase origin main
-          echo "$NEXT" > .github/AUTOMATION_PROGRESS
-          git add .github/AUTOMATION_PROGRESS
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: advance automation progress to task $NEXT"
-            git push origin main || { echo "::error::Could not push progress counter to main (branch protection?)"; exit 1; }
-          fi
+          # Save progress to the "automation-state" branch (never touches main)
+          git checkout -q main
+          BLOB=$(echo "$NEXT" | git hash-object -w --stdin)
+          TREE=$(printf '100644 blob %s\tAUTOMATION_PROGRESS\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -m "chore: automation progress -> task $NEXT")
+          git push -f origin "$COMMIT:refs/heads/automation-state" \
+            || { echo "::error::Could not save progress to automation-state branch"; exit 1; }
+          echo "Saved progress: next task is $NEXT"
