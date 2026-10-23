@@ -18,7 +18,7 @@ env:
   GH_TOKEN: ${{ secrets.GH_PAT }}
   OPENAI_API_KEY: ${{ secrets.PSNC_API_KEY }}
   OPENAI_API_BASE: ${{ secrets.PSNC_API_BASE }}   # https://llm.hpc.psnc.pl/v1
-  MODEL_NAME: "openai/Qwen3-Coder-Next"
+  MODEL_NAME: "openai/Qwen3.8-27B"   # fallback if not allowed: "openai/standard-tier"
 
 jobs:
   run-daily-batch:
@@ -183,9 +183,10 @@ jobs:
 
             git add -A
             if git diff --cached --quiet; then
-              echo "No changes produced for $LABEL — skipping commit/PR."
+              echo "::warning::No changes produced for $LABEL — will retry this task next run."
               git checkout main
               git branch -D "$BRANCH"
+              break   # don't advance the counter, so the task isn't skipped
             else
               git commit -m "feat: $LABEL - $DESC"
               if git push -u origin "$BRANCH"; then
