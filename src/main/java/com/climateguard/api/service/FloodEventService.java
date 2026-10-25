@@ -9,6 +9,8 @@ import com.climateguard.api.model.Region;
 import com.climateguard.api.repository.FloodEventRepository;
 import com.climateguard.api.repository.RegionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class FloodEventService {
+
+    private static final String HIGH_RISK_FLOOD_EVENTS_CACHE = "highRiskFloodEvents";
 
     private final FloodEventRepository floodEventRepository;
     private final RegionRepository regionRepository;
@@ -59,6 +63,7 @@ public class FloodEventService {
      * Returns all flood events with risk score above 0.7 (high risk threshold).
      */
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = HIGH_RISK_FLOOD_EVENTS_CACHE, key = "'all'")
     public List<FloodEventResponse> getHighRiskEvents() {
         return floodEventRepository.findHighRiskEvents().stream()
                 .map(floodEventMapper::toResponse)
@@ -69,6 +74,7 @@ public class FloodEventService {
      * Creates a new flood event record.
      */
     @Transactional
+    @CacheEvict(cacheNames = HIGH_RISK_FLOOD_EVENTS_CACHE, allEntries = true)
     public FloodEventResponse create(FloodEventRequest request) {
         Region region = regionRepository.findById(request.getRegionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Region not found with id: " + request.getRegionId()));
@@ -88,6 +94,7 @@ public class FloodEventService {
      * Updates an existing flood event.
      */
     @Transactional
+    @CacheEvict(cacheNames = HIGH_RISK_FLOOD_EVENTS_CACHE, allEntries = true)
     public FloodEventResponse update(Long id, FloodEventRequest request) {
         FloodEvent event = floodEventRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Flood event not found with id: " + id));
@@ -107,6 +114,7 @@ public class FloodEventService {
      * Deletes a flood event by ID.
      */
     @Transactional
+    @CacheEvict(cacheNames = HIGH_RISK_FLOOD_EVENTS_CACHE, allEntries = true)
     public void delete(Long id) {
         if (!floodEventRepository.existsById(id)) {
             throw new ResourceNotFoundException("Flood event not found with id: " + id);
