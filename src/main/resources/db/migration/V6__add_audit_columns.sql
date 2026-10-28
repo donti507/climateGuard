@@ -1,0 +1,16 @@
+-- V6__add_audit_columns.sql
+
+ALTER TABLE regions
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);
+
+ALTER TABLE flood_events
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);
+
+ALTER TABLE climate_observations
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);

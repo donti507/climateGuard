@@ -2,12 +2,18 @@ package com.climateguard.api.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "flood_events")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@EntityListeners(AuditingEntityListener.class)
 public class FloodEvent {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,5 +25,13 @@ public class FloodEvent {
     @Column(name = "started_at") private LocalDateTime startedAt;
     @Column(name = "ended_at") private LocalDateTime endedAt;
     @Column(columnDefinition = "TEXT") private String description;
-    @Column(name = "created_at", insertable = false, updatable = false) private LocalDateTime createdAt;
+    @CreatedDate
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    @LastModifiedDate
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    @CreatedBy
+    @Column(name = "created_by", length = 100)
+    private String createdBy;
 }
