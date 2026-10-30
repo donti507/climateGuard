@@ -42,6 +42,9 @@ Open http://localhost:8080/swagger-ui.html
 | GET | /api/v1/observations/region/{id}/stats | USER | Climate stats |
 | GET | /api/v1/flood-events/high-risk | USER | High risk events |
 | POST | /api/v1/regions | ADMIN | Create region |
+| GET | /actuator/health | Public (dev) | DB connectivity + Flyway migration status |
+
+The `/actuator/health` endpoint exposes a `databaseFlyway` component with distinct `database` and `flyway` details, including current migration version and pending migrations. Health details are always shown in the dev profile and when authorized in other profiles.
 
 ## Architecture
 
