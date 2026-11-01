@@ -40,6 +40,7 @@ Open http://localhost:8080/swagger-ui.html
 | POST | /api/v1/auth/login | Public | Get JWT token |
 | GET | /api/v1/regions | USER | List all regions |
 | GET | /api/v1/observations/region/{id}/stats | USER | Climate stats |
+| GET | /api/v1/observations/region/{id}/export?format=csv\|json | USER | Export region observations as CSV or JSON |
 | GET | /api/v1/flood-events/high-risk | USER | High risk events |
 | POST | /api/v1/regions | ADMIN | Create region |
 
