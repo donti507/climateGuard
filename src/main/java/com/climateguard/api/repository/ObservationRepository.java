@@ -27,4 +27,15 @@ public interface ObservationRepository extends JpaRepository<ClimateObservation,
             @Param("to") LocalDateTime to,
             @Param("source") String source,
             Pageable pageable);
+
+    @Query("SELECT o FROM ClimateObservation o WHERE o.region.id = :regionId " +
+           "AND (:from IS NULL OR o.observedAt >= :from) " +
+           "AND (:to IS NULL OR o.observedAt <= :to) " +
+           "AND (:source IS NULL OR o.source = :source) " +
+           "ORDER BY o.observedAt ASC")
+    List<ClimateObservation> findFilteredAll(
+            @Param("regionId") Long regionId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("source") String source);
 }

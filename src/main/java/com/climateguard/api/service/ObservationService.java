@@ -58,6 +58,22 @@ public class ObservationService {
     }
 
     /**
+     * Returns all observations for a region matching the supplied filters, for export.
+     */
+    @Transactional(readOnly = true)
+    public List<ObservationResponse> getExportByRegion(Long regionId, LocalDateTime from,
+                                                       LocalDateTime to, String source) {
+        if (!regionRepository.existsById(regionId)) {
+            throw new ResourceNotFoundException("Region not found with id: " + regionId);
+        }
+        return observationRepository
+                .findFilteredAll(regionId, from, to, source)
+                .stream()
+                .map(observationMapper::toResponse)
+                .toList();
+    }
+
+    /**
      * Calculates aggregate climate statistics for a region over a time period.
      */
     @Transactional(readOnly = true)
