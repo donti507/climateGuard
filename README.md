@@ -16,6 +16,9 @@ docker-compose up --build
 ```
 
 ### Local Development
+
+Requires **Java 17+** and **Maven 3.8+**.
+
 ```bash
 # Start PostgreSQL
 docker run --name pg-climateguard \
@@ -33,15 +36,30 @@ Open http://localhost:8080/swagger-ui.html
 ## Default Credentials
 - **Admin**: `admin` / `admin123`
 
-## Key Endpoints
+## Endpoints
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | /api/v1/auth/login | Public | Get JWT token |
-| GET | /api/v1/regions | USER | List all regions |
-| GET | /api/v1/observations/region/{id}/stats | USER | Climate stats |
-| GET | /api/v1/flood-events/high-risk | USER | High risk events |
-| POST | /api/v1/regions | ADMIN | Create region |
+| POST | /api/v1/auth/register | Public | Register a new user |
+| POST | /api/v1/auth/login | Public | Login and receive JWT token |
+| GET | /api/v1/regions | USER | List all regions (paginated, filterable by country) |
+| GET | /api/v1/regions/{id} | USER | Get a region by ID |
+| POST | /api/v1/regions | ADMIN | Create a new region |
+| PUT | /api/v1/regions/{id} | ADMIN | Update a region |
+| DELETE | /api/v1/regions/{id} | ADMIN | Delete a region |
+| GET | /api/v1/observations | USER | List all observations (paginated) |
+| GET | /api/v1/observations/{id} | USER | Get an observation by ID |
+| GET | /api/v1/observations/region/{regionId} | USER | Get observations for a region with optional filters |
+| GET | /api/v1/observations/region/{regionId}/stats | USER | Get climate statistics for a region |
+| POST | /api/v1/observations | ADMIN | Add a new observation |
+| DELETE | /api/v1/observations/{id} | ADMIN | Delete an observation |
+| GET | /api/v1/flood-events | USER | List all flood events (paginated, filterable) |
+| GET | /api/v1/flood-events/{id} | USER | Get a flood event by ID |
+| GET | /api/v1/flood-events/region/{regionId} | USER | Get all flood events for a region |
+| GET | /api/v1/flood-events/high-risk | USER | Get all events with risk score > 0.7 |
+| POST | /api/v1/flood-events | ADMIN | Create a flood event |
+| PUT | /api/v1/flood-events/{id} | ADMIN | Update a flood event |
+| DELETE | /api/v1/flood-events/{id} | ADMIN | Delete a flood event |
 
 ## Architecture
 
